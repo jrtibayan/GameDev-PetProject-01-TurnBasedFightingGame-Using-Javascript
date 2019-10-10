@@ -9,10 +9,10 @@
  *              b. << DONE >> Display Play Button
  *              c. << DONE >> Display Settings Button
  *              d. << DONE >> Display Exit Game Button
- *      3. Splash Screen Button Click Functions
- *              a. Change state status to "settings" if settings button is clicked
- *              b. Change state status to "lobby" if play button is clicked
- *              c. Change state status to "quit?" if close button is clicked
+ *      3. << DONE >> Splash Screen Button Click Functions
+ *              a. << DONE >> Change state status to "settings" if settings button is clicked
+ *              b. << DONE >> Change state status to "lobby" if play button is clicked
+ *              c. << DONE >> Change state status to "quit?" if close button is clicked
  *      
  */
 
@@ -22,12 +22,18 @@
 //*******************************************************************************************************************************
 // global variables
 
-const maxWidth = 800, maxHeight = 600;
+const SHOWLOG = true;
+
+const MAXWIDTH = 800, MAXHEIGHT = 600;
 
 var canvasWidth = window.innerWidth, 
     canvasHeight = window.innerHeight;
 
 var spriteImg = null;
+
+var input = {
+    click: null
+};
 
 
 
@@ -35,9 +41,9 @@ var spriteImg = null;
 //*******************************************************************************************************************************
 // set the size for the canvas
 
-if(canvasWidth >= maxWidth) {
-    canvasWidth = maxWidth;
-    canvasHeight = maxHeight;
+if(canvasWidth >= MAXWIDTH) {
+    canvasWidth = MAXWIDTH;
+    canvasHeight = MAXHEIGHT;
 }
 
 
@@ -84,40 +90,69 @@ var State = class State {
     static start() {
         let state = Object.create(null);
         state.status = "splash";
-        state.sprites = [];
+        state.sprites = Object.create(null);
+        state.sprites.all = [];
+        state.sprites.splashButtons = [];
 
-        state.sprites.push(new Sprite(spriteImg, 
+        // game title
+        state.sprites.all.push(new Sprite(spriteImg, 
             new Vec(0, 0), new Vec(670, 490), // src pos and size,
             new Vec(Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2)), new Vec(670, 490), // dest pos and size
-            function(state) { return true; }, // condition for display
+            function(state) { return state.status === "splash"; }, // condition for display
             state, // info used for condition for display
             "center", 
-            0
+            0,
+            null
         ));
 
         // play
-        state.sprites.push(new Sprite(spriteImg, 
+        state.sprites.all.push(new Sprite(spriteImg, 
             new Vec(0, 490), new Vec(150, 60),
             new Vec(6 * Math.floor(canvasWidth / 9), 7 * Math.floor(canvasHeight / 9)), new Vec(150, 60),
-            function(state) { return true; },
-            state
+            function(state) { return state.status === "splash"; },
+            state,
+            undefined,
+            0,
+            function(state) {
+                SHOWLOG && console.log("change state status to << lobby >>");
+                return new State("lobby", state.sprites);
+            },
+            null
         ));
+
+        state.sprites.splashButtons.push(state.sprites.all[state.sprites.all.length - 1]);
 
         // close
-         state.sprites.push(new Sprite(spriteImg, 
+         state.sprites.all.push(new Sprite(spriteImg, 
             new Vec(150, 490), new Vec(32, 32),
             new Vec(canvasWidth - 32, 0), new Vec(32, 32),
-            function(state) { return true; },
-            state
+            function(state) { return state.status === "splash"; },
+            state,
+            undefined,
+            0,
+            function(state) {
+                SHOWLOG && console.log("change state status to << quit? >>");
+                return new State("quit?", state.sprites);
+            }
         ));
 
+        state.sprites.splashButtons.push(state.sprites.all[state.sprites.all.length - 1]);
+
         // settings
-        state.sprites.push(new Sprite(spriteImg, 
+        state.sprites.all.push(new Sprite(spriteImg, 
             new Vec(182, 490), new Vec(32, 32),
             new Vec(canvasWidth - 32 - 32 - 5, 0), new Vec(32, 32),
-            function(state) { return true; },
-            state
+            function(state) { return state.status === "splash"; },
+            state,
+            undefined,
+            0,
+            function(state) {
+                SHOWLOG && console.log("change state status to << settings >>");
+                return new State("settings", state.sprites);
+            }
         ));
+
+        state.sprites.splashButtons.push(state.sprites.all[state.sprites.all.length - 1]);
 
         return new State(state.status, state.sprites);
     }
@@ -125,11 +160,39 @@ var State = class State {
 }
 
 State.prototype.update = function(time) {
-    let status = this.status;
+    let newState = Object.create(null);
+    newState.status = this.status;
+    newState.sprites = this.sprites;
+
+    newState.sprites.all = newState.sprites.all.map(sprite => {
+        sprite.update(time, newState);
+        return sprite;
+    });
+    
+    // do something if there was input
+    if(input.click !== null) {
+        switch(newState.status) {
+            case "splash":
+                for(i in newState.sprites.splashButtons) {
+                    if(newState.sprites.splashButtons[i].isClicked()) {
+                        newState = newState.sprites.splashButtons[i].clicked(newState);
+                        break;
+                    }
+                }
+
+                input.click = null;
+            break;
+            case "settings":
+            break;
+            case "lobby":
+            break;
+            case "quit?":
+            break;
+        }
+    }
 
     // do change in status if anything happend
-
-    return new State(status, this.sprites);
+    return new State(newState.status, newState.sprites);
 };
 
 
@@ -146,10 +209,22 @@ var CanvasDisplay = class CanvasDisplay {
         this.canvas.height = canvasHeight;
         this.canvas.style.backgroundColor = "rgb(240,240,240)";
         this.canvas.style.border = "0";
-        
+
         parent.appendChild(this.canvas);
-        
+
         this.cx = this.canvas.getContext("2d");
+
+        function getCursorPosition(canvas, event) {
+            let rect = canvas.getBoundingClientRect()
+            let x = event.clientX - rect.left
+            let y = event.clientY - rect.top    
+            input.click = new Vec(x, y);
+        }
+
+        this.canvas.addEventListener('mousedown', function(e) {
+            getCursorPosition(this, e)
+        });
+
     }
 
     clear() {
@@ -163,7 +238,7 @@ CanvasDisplay.prototype.clearDisplay = function(status) {
 };
 
 CanvasDisplay.prototype.drawSprites = function(sprites) {
-    for (let sprite of sprites) {
+    for (let sprite of sprites.all) {
         if(sprite.display) {
             if(["bird"].includes(sprite.getType())) {
                 sprite.draw(this.cx);
@@ -191,7 +266,8 @@ CanvasDisplay.prototype.syncState = function(state) {
 
 var Sprite = class Sprite {
 
-    constructor(srcImage, posOnSrc, sizeOnSrc, pos, size, checkDisplay, state, pointOfOrigin , rotation) {
+    constructor(srcImage, posOnSrc, sizeOnSrc, pos, size, checkDisplay, state, pointOfOrigin , rotation, clicked) {
+        this.checkDisplay = checkDisplay;
         this.display = checkDisplay(state);
 
         this.srcImage = srcImage;
@@ -209,6 +285,8 @@ var Sprite = class Sprite {
             this.pos = pos;
         }
         this.rotation = (rotation === undefined) ? 0 : rotation;
+
+        this.clicked = clicked;
     }
 
     static create(pos) {
@@ -223,8 +301,25 @@ Sprite.prototype.getType = function() {
     return "other";
 }
 
-Sprite.prototype.update = function() {
+Sprite.prototype.update = function(time, state) {
+    this.display = this.checkDisplay(state);
     return this;
+}
+
+Sprite.prototype.isClicked = function() {
+    let clickPos = input.click;
+    let pos = {}, 
+        size = {};
+
+        pos.x = this.pos.x;
+        pos.y = this.pos.y;
+        size.x = this.size.x;
+        size.y = this.size.y;
+
+    let isClicked = clickPos.x >= pos.x && clickPos.x <= pos.x + size.x && 
+    clickPos.y >= pos.y && clickPos.y <= pos.y + size.y;
+
+    return isClicked;
 }
 
 
